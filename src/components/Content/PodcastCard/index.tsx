@@ -42,12 +42,7 @@ const PodcastCard: React.FC<PodcastCardProps> = ({ podcast }) => {
             color="grey.900"
           >
             <Image mr={1} h="12px" w="12px" src="/icons/Vector.svg" />
-            <Text
-              fontSize={"12px"}
-              fontWeight="700"
-              // lineHeight={"12px"}
-              lineHeight="14.4px"
-            >
+            <Text fontSize={"12px"} fontWeight="700" lineHeight="14.4px">
               30% Completed
             </Text>
           </Tag>

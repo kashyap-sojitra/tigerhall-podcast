@@ -7,7 +7,6 @@ import {
   Heading,
   Img,
   Skeleton,
-  useBreakpointValue,
 } from "@chakra-ui/react";
 import PodcastItem from "../Content/PodcastCard";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -28,15 +27,12 @@ const Content = ({ searchKey }: ContentProps) => {
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [oldSearchKey, setOldSearchKey] = useState<string>("");
   const skeletonArray = [0, 1, 2, 3, 4];
+  const [columns, setColumns] = useState<number>(1);
 
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const observer = useRef<IntersectionObserver | null>(null);
-  const columnCount = useBreakpointValue({
-    base: 1,
-    sm: 1,
-    md: 2,
-    lg: 3,
-    xl: 5,
-  });
+
+  const isSearching = offset === 0 || oldSearchKey !== searchKey;
 
   const processPodcastData = (data: Podcast[]): Podcast[] => {
     return data.map((podcast) => ({
@@ -102,6 +98,24 @@ const Content = ({ searchKey }: ContentProps) => {
     [loading, hasMore, podcastData]
   );
 
+  const handleResize = useCallback(() => {
+    const cardWidth = 244;
+    const gap = 24;
+    if (containerRef.current) {
+      const containerWidth = containerRef.current.offsetWidth;
+      const newColumns = Math.floor((containerWidth + gap) / (cardWidth + gap));
+      setColumns(newColumns);
+    }
+  }, []);
+
+  useEffect(() => {
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [handleResize, podcastData]);
+
   return (
     <Flex
       direction="column"
@@ -126,14 +140,14 @@ const Content = ({ searchKey }: ContentProps) => {
           Tigerhall Library
         </Heading>
       </Box>
-      {loading && offset === 0 && (
+      {loading && isSearching && (
         <Flex justify="center" align="center" height="100%">
           <Img src="../../../public/icons/loading.gif"></Img>
         </Flex>
       )}
-      {podcastData.length > 0 ? (
+      {podcastData.length > 0 && oldSearchKey === searchKey ? (
         <Grid
-          templateColumns={`repeat(${columnCount}, 1fr)`}
+          templateColumns={`repeat(${columns}, 1fr)`}
           gap="24px"
           overflowY="auto"
           pb="60px"
@@ -143,9 +157,10 @@ const Content = ({ searchKey }: ContentProps) => {
               width: "0px",
               height: "0px",
             },
-            scrollbarWidth: "none" /* For Firefox */,
-            msOverflowStyle: "none" /* For Internet Explorer and Edge */,
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
           }}
+          ref={containerRef}
         >
           {podcastData.map((item, index) => (
             <GridItem
@@ -160,60 +175,57 @@ const Content = ({ searchKey }: ContentProps) => {
               {index === podcastData.length - 1 && <div ref={lastPodcastRef} />}
             </GridItem>
           ))}
-          {hasMore &&
-            loading &&
-            skeletonArray.map((_item, index) => (
-              <GridItem
-                key={index}
-                colSpan={1}
-                display={"flex"}
-                flexDirection={"column"}
-                alignItems={"center"}
-                justifyContent={"center"}
+          {hasMore && loading && (
+            <GridItem
+              colSpan={1}
+              display={"flex"}
+              flexDirection={"column"}
+              alignItems={"center"}
+              justifyContent={"center"}
+            >
+              <Card
+                padding={0}
+                height="272px"
+                width={"244px"}
+                borderRadius="8px"
               >
-                <Card
-                  padding={0}
-                  height="272px"
-                  width={"244px"}
-                  borderRadius="8px"
+                <Skeleton
+                  height="120px"
+                  borderRadius={0}
+                  borderTopLeftRadius="8px"
+                  borderTopRightRadius="8px"
+                />
+                <Flex
+                  direction="column"
+                  gap="15px"
+                  marginTop="10px"
+                  marginLeft="16px"
+                  padding="5px"
                 >
-                  <Skeleton
-                    height="120px"
-                    borderRadius={0}
-                    borderTopLeftRadius="8px"
-                    borderTopRightRadius="8px"
-                  />
+                  {skeletonArray.map(
+                    (_itemInside, insideIndex) =>
+                      insideIndex !== 4 && (
+                        <Skeleton
+                          key={insideIndex}
+                          height="10px"
+                          width="85%"
+                        ></Skeleton>
+                      )
+                  )}
+                </Flex>
+                <Flex direction="column" mt="20px" justifyContent="flex-end">
                   <Flex
-                    direction="column"
-                    gap="15px"
-                    marginTop="10px"
-                    marginLeft="16px"
-                    padding="5px"
+                    direction="row"
+                    justifyContent="flex-end"
+                    width="100%"
+                    padding="10px"
                   >
-                    {skeletonArray.map(
-                      (_itemInside, insideIndex) =>
-                        insideIndex !== 4 && (
-                          <Skeleton
-                            key={insideIndex}
-                            height="10px"
-                            width="85%"
-                          ></Skeleton>
-                        )
-                    )}
+                    <Skeleton height="10px" width="20%"></Skeleton>
                   </Flex>
-                  <Flex direction="column" mt="20px" justifyContent="flex-end">
-                    <Flex
-                      direction="row"
-                      justifyContent="flex-end"
-                      width="100%"
-                      padding="10px"
-                    >
-                      <Skeleton height="10px" width="20%"></Skeleton>
-                    </Flex>
-                  </Flex>
-                </Card>
-              </GridItem>
-            ))}
+                </Flex>
+              </Card>
+            </GridItem>
+          )}
         </Grid>
       ) : (
         podcastData.length === 0 &&
