@@ -20,3 +20,9 @@ export interface Podcast {
   categories: Category[];
   experts: Expert[];
 }
+
+export interface ContentData {
+  contentCards: {
+    edges: Podcast[];
+  };
+}

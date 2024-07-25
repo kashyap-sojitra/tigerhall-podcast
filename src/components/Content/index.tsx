@@ -1,26 +1,35 @@
 import {
   Box,
+  Card,
   Flex,
   Grid,
   GridItem,
   Heading,
-  Spinner,
+  Img,
+  Skeleton,
   useBreakpointValue,
 } from "@chakra-ui/react";
-import PodcastCard from "../Content/PodcastCard";
-import { useEffect, useState } from "react";
+import PodcastItem from "../Content/PodcastCard";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { retrievePodcastData } from "../../podcast/services";
 import { Podcast } from "../../types";
+import { convertImageURI } from "../../utils/helper";
+import client from "../../apollo/client";
 
 interface ContentProps {
   searchKey: string;
 }
 
 const Content = ({ searchKey }: ContentProps) => {
-  console.log(searchKey);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<boolean>(false);
+  const [offset, setOffset] = useState<number>(0);
   const [podcastData, setPodcastData] = useState<Podcast[]>([]);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [oldSearchKey, setOldSearchKey] = useState<string>("");
+  const skeletonArray = [0, 1, 2, 3, 4];
 
+  const observer = useRef<IntersectionObserver | null>(null);
   const columnCount = useBreakpointValue({
     base: 1,
     sm: 1,
@@ -29,138 +38,69 @@ const Content = ({ searchKey }: ContentProps) => {
     xl: 5,
   });
 
+  const processPodcastData = (data: Podcast[]): Podcast[] => {
+    return data.map((podcast) => ({
+      ...podcast,
+      image: {
+        ...podcast.image,
+        uri: convertImageURI(podcast.image.uri, 244, 120),
+      },
+    }));
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       setError(false);
       try {
-        setPodcastData([
-          {
-            name: "audio Teresa",
-            length: 70,
-            image: {
-              uri: "https://images.staging.tigerhall.io/2023-06-01/52b0c98e-7b3d-42c7-ae41-902df14c3f76.png",
-            },
-            categories: [
-              {
-                name: "category April",
-              },
-            ],
-            experts: [
-              {
-                firstName: "Lorine",
-                lastName: "Walsh",
-                title: "",
-                company: "",
-              },
-            ],
-          },
-          {
-            name: "summarized podcast test",
-            length: 869,
-            image: {
-              uri: "https://images.staging.tigerhall.io/users/2023-07-26/5a4dd479-8f14-47ee-a546-2b7aee2e0a35-2699aba9-f71c-4310-a204-995d3bb7af2e.jpeg",
-            },
-            categories: [
-              {
-                name: "category Gertrude",
-              },
-            ],
-            experts: [
-              {
-                firstName: "Lorine",
-                lastName: "Walsh",
-                title: "",
-                company: "",
-              },
-            ],
-          },
-          {
-            name: "audio Vincent",
-            length: 1337,
-            image: {
-              uri: "https://images.staging.tigerhall.io/2023-06-01/52b0c98e-7b3d-42c7-ae41-902df14c3f76.png",
-            },
-            categories: [
-              {
-                name: "category Enola",
-              },
-              {
-                name: "category Ila",
-              },
-              {
-                name: "category Loyal",
-              },
-            ],
-            experts: [
-              {
-                firstName: "Reilly",
-                lastName: "Brakus",
-                title:
-                  "test test long text asdfasdfasdf asdf asdf as dfa sdf asdf asd fas fd asd fa s",
-                company: "sdfads asd fasd f asd f asdf as df as fas dfa sdf ",
-              },
-            ],
-          },
-          {
-            name: "audio Mauricio",
-            length: 1337,
-            image: {
-              uri: "https://images.staging.tigerhall.io/2023-06-01/52b0c98e-7b3d-42c7-ae41-902df14c3f76.png",
-            },
-            categories: [
-              {
-                name: "category Enola",
-              },
-              {
-                name: "category Kailey",
-              },
-              {
-                name: "category Loyal",
-              },
-            ],
-            experts: [
-              {
-                firstName: "Chadd",
-                lastName: "Waelchi",
-                title: "",
-                company: "",
-              },
-            ],
-          },
-          {
-            name: "test 12344",
-            length: 6,
-            image: {
-              uri: "https://images.staging.tigerhall.io/users/2023-09-13/7f7ec0b5-c32c-4f70-89ed-c7f80925c449-460114c6-a8d7-498c-8541-567e82bc4069.png",
-            },
-            categories: [
-              {
-                name: "category Enola",
-              },
-              {
-                name: "category Ila",
-              },
-            ],
-            experts: [
-              {
-                firstName: "expert",
-                lastName: "new",
-                title: "",
-                company: "",
-              },
-            ],
-          },
-        ]);
+        const isSearchKeyUpdated = oldSearchKey !== searchKey;
+        const limit = 5;
+        const data = await retrievePodcastData(
+          client,
+          searchKey,
+          limit,
+          isSearchKeyUpdated ? 0 : offset
+        );
+        const transformedData: Podcast[] = processPodcastData(
+          data.contentCards.edges
+        );
+
+        if (offset === 0 || isSearchKeyUpdated) {
+          setPodcastData(transformedData);
+        } else {
+          setPodcastData((prevData) => [...prevData, ...transformedData]);
+        }
+
+        setHasMore(transformedData.length === limit);
       } catch (error) {
         setError(true);
       } finally {
+        setOldSearchKey(searchKey);
         setLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+  }, [offset, oldSearchKey, searchKey]);
+
+  const lastPodcastRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (loading || !hasMore || !node) return;
+
+      if (observer.current) {
+        observer.current.disconnect();
+      }
+
+      observer.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && hasMore) {
+          setOffset(podcastData.length);
+        }
+      });
+
+      observer.current.observe(node);
+    },
+    [loading, hasMore, podcastData]
+  );
 
   return (
     <Flex
@@ -186,15 +126,9 @@ const Content = ({ searchKey }: ContentProps) => {
           Tigerhall Library
         </Heading>
       </Box>
-      {loading && (
+      {loading && offset === 0 && (
         <Flex justify="center" align="center" height="100%">
-          <Spinner
-            thickness="4px"
-            speed="0.65s"
-            emptyColor="gray.200"
-            color="#FF5900"
-            size="xl"
-          />
+          <Img src="../../../public/icons/loading.gif"></Img>
         </Flex>
       )}
       {podcastData.length > 0 ? (
@@ -222,21 +156,79 @@ const Content = ({ searchKey }: ContentProps) => {
               alignItems={"center"}
               justifyContent={"center"}
             >
-              <PodcastCard key={index} podcast={item} />
+              <PodcastItem key={index} podcast={item} />
+              {index === podcastData.length - 1 && <div ref={lastPodcastRef} />}
             </GridItem>
           ))}
+          {hasMore &&
+            loading &&
+            skeletonArray.map((_item, index) => (
+              <GridItem
+                key={index}
+                colSpan={1}
+                display={"flex"}
+                flexDirection={"column"}
+                alignItems={"center"}
+                justifyContent={"center"}
+              >
+                <Card
+                  padding={0}
+                  height="272px"
+                  width={"244px"}
+                  borderRadius="8px"
+                >
+                  <Skeleton
+                    height="120px"
+                    borderRadius={0}
+                    borderTopLeftRadius="8px"
+                    borderTopRightRadius="8px"
+                  />
+                  <Flex
+                    direction="column"
+                    gap="15px"
+                    marginTop="10px"
+                    marginLeft="16px"
+                    padding="5px"
+                  >
+                    {skeletonArray.map(
+                      (_itemInside, insideIndex) =>
+                        insideIndex !== 4 && (
+                          <Skeleton
+                            key={insideIndex}
+                            height="10px"
+                            width="85%"
+                          ></Skeleton>
+                        )
+                    )}
+                  </Flex>
+                  <Flex direction="column" mt="20px" justifyContent="flex-end">
+                    <Flex
+                      direction="row"
+                      justifyContent="flex-end"
+                      width="100%"
+                      padding="10px"
+                    >
+                      <Skeleton height="10px" width="20%"></Skeleton>
+                    </Flex>
+                  </Flex>
+                </Card>
+              </GridItem>
+            ))}
         </Grid>
       ) : (
-        <Heading
-          as="h3"
-          size="md"
-          color="white"
-          fontSize="20px"
-          fontWeight="500"
-          textAlign="center"
-        >
-          No content found
-        </Heading>
+        podcastData.length === 0 &&
+        !loading && (
+          <Heading
+            as="h3"
+            size="md"
+            color="white"
+            fontSize="20px"
+            fontWeight="500"
+            textAlign="center"
+          >
+            No content found
+          </Heading>
+        )
       )}
       {error && podcastData.length !== 0 && (
         <Heading
